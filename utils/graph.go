@@ -40,13 +40,13 @@ func NewPrometheusNodeList(feds []string) PrometheusNodeList {
 }
 
 // Search will find the matched nodes and  return true if exist
-func (pnl PrometheusNodeList) Search(host string, recursive bool) bool {
-	for _, children := range pnl {
+func (pn *PrometheusNode) Search(host string, recursive bool) bool {
+	for _, children := range pn.Children {
 		if children.Host == host {
 			return true
 		}
 		if recursive == true {
-			find := children.Children.Search(host, recursive)
+			find := children.Search(host, recursive)
 			if find == true {
 				return true
 			}
@@ -74,7 +74,7 @@ func (pn *PrometheusNode) SearchAndUpdateStatus(host string, recursive bool, sta
 func (pn *PrometheusNode) InsertOrUpdate(newNode *PrometheusNode, search bool) {
 	// search only in first layer
 	// if not exist , then append on its children array
-	if search && pn.Children.Search(newNode.Host, false) == false {
+	if search && pn.Search(newNode.Host, false) == false {
 		pn.Children = append(pn.Children, newNode)
 		return
 	}
@@ -87,11 +87,36 @@ func (pn *PrometheusNode) InsertOrUpdate(newNode *PrometheusNode, search bool) {
 	}
 }
 
-func (pn *PrometheusNode) PrintNodesTree(prefix string, depth int) string {
+// DeleteNodeByHost will delete from graph by host name
+func (pn *PrometheusNode) DeleteNodeByHost(host string) bool {
+	for index, children := range pn.Children {
+		if children.Host == host {
+			pn.Children = append(pn.Children[:index], pn.Children[index+1:]...)
+			return true
+		}
+		deleteStatus := children.DeleteNodeByHost(host)
+		if deleteStatus == true {
+			return true
+		}
+	}
+	return false
+}
+
+// PrintNodesTree print out the struct of nodes
+func (pn *PrometheusNode) PrintNodesTree(prefix string, depth int, withStatus bool) string {
 	prefixWithDepth := strings.Repeat(prefix, depth)
-	tree := "\n" + prefixWithDepth + pn.Host
+	status := ""
+	if withStatus == true {
+		if pn.Status == true {
+			status = "[ok]"
+		} else {
+			status = "[error]"
+		}
+	} else {
+	}
+	tree := "\n" + prefixWithDepth + pn.Host + status
 	for _, child := range pn.Children {
-		tree = tree + fmt.Sprint(child.PrintNodesTree(prefix, depth+1))
+		tree = tree + fmt.Sprint(child.PrintNodesTree(prefix, depth+1, withStatus))
 	}
 	return tree
 }

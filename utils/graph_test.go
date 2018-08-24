@@ -66,22 +66,23 @@ func TestNewPrometheusNodeList(t *testing.T) {
 }
 
 func TestPrometheusNodeListSearch(t *testing.T) {
+	nodeRoot, _ := NewPrometheusNode(rootHost)
 	nodeRootList := NewPrometheusNodeList(fedsRoot)
 	nodeRootList[0].Children = NewPrometheusNodeList(fedsChild11)
 	nodeRootList[0].Children[0].Children = NewPrometheusNodeList(fedsChild111)
 	nodeRootList[1].Children = NewPrometheusNodeList(fedsChild21)
-
-	if searchResult := nodeRootList.Search(fedsChild11[0], true); searchResult == false {
+	nodeRoot.Children = nodeRootList
+	if searchResult := nodeRoot.Search(fedsChild11[0], true); searchResult == false {
 		t.Fatalf("Expect search result is true, but got false")
 	}
 
-	if searchResult := nodeRootList.Search(fedsChild111[0], false); searchResult == true {
+	if searchResult := nodeRoot.Search(fedsChild111[0], false); searchResult == true {
 		t.Fatalf("Expect search result is false, but got true")
 	}
-	if searchResult := nodeRootList.Search(fedsChild11[0], true); searchResult == false {
+	if searchResult := nodeRoot.Search(fedsChild11[0], true); searchResult == false {
 		t.Fatalf("Expect search result is true, but got false")
 	}
-	if searchResult := nodeRootList.Search("not-exist.domain", true); searchResult == true {
+	if searchResult := nodeRoot.Search("not-exist.domain", true); searchResult == true {
 		t.Fatalf("Expect search result is false, but got true")
 	}
 }
@@ -104,7 +105,7 @@ func TestPrometheusNodeInsertOrUpdate(t *testing.T) {
 
 	nodeRoot.InsertOrUpdate(nodeChild2, true)
 
-	if exist := nodeRoot.Children.Search(fedsChild21[0], true); exist == false {
+	if exist := nodeRoot.Search(fedsChild21[0], true); exist == false {
 		t.Fatalf("Expect nodeRoot contain new element, but got nothing")
 	}
 
@@ -142,26 +143,64 @@ func TestPrometheusNodePrintTree(t *testing.T) {
 	nodeRoot, _ := NewPrometheusNode(rootHost)
 	nodeRootList := NewPrometheusNodeList(fedsRoot)
 	nodeRoot.Children = nodeRootList
-	nodeRoot.SearchAndUpdateStatus(childrenHosts[0], true, true)
 	nodeChild2, _ := NewPrometheusNode(childrenHosts[2])
 	nodeChild2List := NewPrometheusNodeList(fedsChild21)
 	nodeChild2.Children = nodeChild2List
 	nodeRoot.InsertOrUpdate(nodeChild2, true)
-
-	nodeRoot.SearchAndUpdateStatus(childrenHosts[2], true, true)
-
 	expect := `
 source-prometheus:9090
- source-prometheus-1:9090
- source-prometheus-2:9090
-  source-prometheus-21:9090
-  source-prometheus-22:9090
-  source-prometheus-23:9090
-source-prometheus-3:9090`
-	if expect != nodeRoot.PrintNodesTree(" ", 0) {
-		t.Fatalf("Expect %s, but got %s", expect, nodeRoot.PrintNodesTree(" ", 0))
+————source-prometheus-1:9090
+————source-prometheus-2:9090
+————————source-prometheus-21:9090
+————————source-prometheus-22:9090
+————————source-prometheus-23:9090
+————source-prometheus-3:9090`
+
+	if expect != nodeRoot.PrintNodesTree("————", 0, false) {
+		t.Fatalf("Expect %s, but got %s", expect, nodeRoot.PrintNodesTree("————", 0, false))
 	}
+	expect = `
+source-prometheus:9090[error]
+————source-prometheus-1:9090[error]
+————source-prometheus-2:9090[error]
+————————source-prometheus-21:9090[error]
+————————source-prometheus-22:9090[error]
+————————source-prometheus-23:9090[error]
+————source-prometheus-3:9090[error]`
+	if expect != nodeRoot.PrintNodesTree("————", 0, true) {
+		t.Fatalf("Expect %s, but got %s", expect, nodeRoot.PrintNodesTree("————", 0, true))
+	}
+	nodeRoot.SearchAndUpdateStatus(childrenHosts[2], true, true)
+	expect = `
+source-prometheus:9090[error]
+————source-prometheus-1:9090[error]
+————source-prometheus-2:9090[ok]
+————————source-prometheus-21:9090[error]
+————————source-prometheus-22:9090[error]
+————————source-prometheus-23:9090[error]
+————source-prometheus-3:9090[error]`
+	if expect != nodeRoot.PrintNodesTree("————", 0, true) {
+		t.Fatalf("Expect %s, but got %s", expect, nodeRoot.PrintNodesTree("————", 0, true))
+	}
+}
 
-	// status := nodeRoot.Children[1].Children
-
+func TestPrometheusNodeDeleteByHost(t *testing.T) {
+	nodeRoot, _ := NewPrometheusNode(rootHost)
+	nodeRootList := NewPrometheusNodeList(fedsRoot)
+	nodeRoot.Children = nodeRootList
+	nodeChild2, _ := NewPrometheusNode(childrenHosts[2])
+	nodeChild2List := NewPrometheusNodeList(fedsChild21)
+	nodeChild2.Children = nodeChild2List
+	nodeRoot.InsertOrUpdate(nodeChild2, true)
+	deleteItem := "source-prometheus-21:9090"
+	if true != nodeRoot.Search(deleteItem, true) {
+		t.Fatalf("Expect %s found in list, but not in list", deleteItem)
+	}
+	deleteStatus := nodeRoot.DeleteNodeByHost(deleteItem)
+	if deleteStatus == false {
+		t.Fatal("Expect delete and return true, but got false")
+	}
+	if false != nodeRoot.Search(deleteItem, true) {
+		t.Fatalf("Expect %s not found, but still in list", deleteItem)
+	}
 }
