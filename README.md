@@ -1,0 +1,2 @@
+# hercules
+用于管理prometheus多级别federation的工具
