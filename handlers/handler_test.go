@@ -7,7 +7,7 @@ import (
 )
 
 func TestHealthCheckHandler(t *testing.T) {
-	req, err := http.NewRequest("GET", "/health-check", nil)
+	req, err := http.NewRequest("GET", "/status", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -24,5 +24,21 @@ func TestHealthCheckHandler(t *testing.T) {
 		t.Errorf("handler returned unexpected body: got %v want %v",
 			recorder.Body.String(), expected)
 	}
+}
 
+func TestRequestProxyHandlerWithNoRequestHeader(t *testing.T) {
+	req, err := http.NewRequest("GET", "/proxy", nil)
+	req.Header.Set("X-Prometheus-Proxy", "")
+	req.Header.Set("X-Prometheus-Request", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	recorder := httptest.NewRecorder()
+	handler := http.HandlerFunc(RequestProxy)
+	handler.ServeHTTP(recorder, req)
+
+	if status := recorder.Code; status != http.StatusBadRequest {
+		t.Errorf("handler returned wrong status code: got %v want %v",
+			status, http.StatusBadRequest)
+	}
 }
