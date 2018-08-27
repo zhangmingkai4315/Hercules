@@ -1,8 +1,10 @@
 package utils
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 )
 
@@ -119,4 +121,34 @@ func (pn *PrometheusNode) PrintNodesTree(prefix string, depth int, withStatus bo
 		tree = tree + fmt.Sprint(child.PrintNodesTree(prefix, depth+1, withStatus))
 	}
 	return tree
+}
+
+// GetGraph will return a http handler function
+// which encode current node info to json response
+func GetGraph(pn *PrometheusNode) func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(pn)
+	}
+}
+
+// UpdateGraph will insert or update a node from post data
+func UpdateGraph(pn *PrometheusNode) func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var node PrometheusNode
+		if err := json.NewDecoder(r.Body).Decode(&node); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte("Invalid request"))
+			return
+		}
+		if node.Host == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte("Invalid request"))
+			return
+		}
+		pn.InsertOrUpdate(&node, true)
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(pn)
+	}
 }

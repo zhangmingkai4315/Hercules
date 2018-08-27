@@ -1,7 +1,13 @@
 package utils
 
 import (
+	"bytes"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 var (
@@ -203,4 +209,96 @@ func TestPrometheusNodeDeleteByHost(t *testing.T) {
 	if false != nodeRoot.Search(deleteItem, true) {
 		t.Fatalf("Expect %s not found, but still in list", deleteItem)
 	}
+}
+
+func TestGetFederationHostsAndReturnGraphNode(t *testing.T) {
+	feds, _ := GetFederationHostsFromConfig("testdata/prometheus.conf")
+	node, _ := NewPrometheusNode(currentNode)
+	children := NewPrometheusNodeList(feds)
+	node.Children = children
+	req, err := http.NewRequest("GET", "/graph", nil)
+	assert.Nil(t, err)
+	handlerFunc := GetGraph(node)
+	recorder := httptest.NewRecorder()
+	handler := http.HandlerFunc(handlerFunc)
+	handler.ServeHTTP(recorder, req)
+
+	if status := recorder.Code; status != http.StatusOK {
+		t.Errorf("handler returned wrong status code: got %v want %v",
+			status, http.StatusOK)
+	}
+
+	var response map[string]interface{}
+
+	err = json.Unmarshal([]byte(recorder.Body.String()), &response)
+	value, exists := response["host"]
+	assert.Nil(t, err)
+	assert.True(t, exists)
+	assert.Equal(t, value, currentNode)
+
+}
+
+func TestUpdateGraphNodeWithBadRequest(t *testing.T) {
+	feds, _ := GetFederationHostsFromConfig("testdata/prometheus.conf")
+	node, _ := NewPrometheusNode(currentNode)
+	children := NewPrometheusNodeList(feds)
+	node.Children = children
+	handlerFunc := UpdateGraph(node)
+	recorder := httptest.NewRecorder()
+	handler := http.HandlerFunc(handlerFunc)
+	PostDataList := []string{
+		`{"not-exist-key" : "value"}`,
+		`{"host" : ""}`,
+	}
+	for _, postData := range PostDataList {
+		req, err := http.NewRequest(
+			"POST",
+			"/update-graph",
+			bytes.NewBuffer([]byte(postData)))
+		assert.Nil(t, err)
+		handler.ServeHTTP(recorder, req)
+		if status := recorder.Code; status != http.StatusBadRequest {
+			t.Errorf("handler returned wrong status code: got %v want %v",
+				status, http.StatusBadRequest)
+		}
+	}
+}
+
+func TestGetFederationHostsAndUpdateGraphNode(t *testing.T) {
+	feds, _ := GetFederationHostsFromConfig("testdata/prometheus.conf")
+	node, _ := NewPrometheusNode(currentNode)
+	children := NewPrometheusNodeList(feds)
+	node.Children = children
+	req, err := http.NewRequest(
+		"POST",
+		"/update-graph",
+		bytes.NewBuffer([]byte(`
+		{
+			"host" : "source-prometheus-1:9090",
+			"status":true,
+			"children":[{
+				"host":"source-prometheus-11:9090",
+				"status":true}
+			]
+		}`)))
+
+	assert.Nil(t, err)
+	handlerFunc := UpdateGraph(node)
+	recorder := httptest.NewRecorder()
+	handler := http.HandlerFunc(handlerFunc)
+	handler.ServeHTTP(recorder, req)
+
+	if status := recorder.Code; status != http.StatusCreated {
+		t.Errorf("handler returned wrong status code: got %v want %v",
+			status, http.StatusCreated)
+	}
+
+	var response PrometheusNode
+
+	err = json.Unmarshal([]byte(recorder.Body.String()), &response)
+	pnl := response.Children
+	assert.Equal(t, 3, len(pnl))
+	assert.Equal(t, 1, len(pnl[0].Children))
+	assert.Equal(t, pnl[0].Children[0].Host, "source-prometheus-11:9090")
+	assert.True(t, pnl[0].Children[0].Status)
 }
