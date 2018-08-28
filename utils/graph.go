@@ -10,20 +10,24 @@ import (
 
 // PrometheusNode will include current node infomations
 type PrometheusNode struct {
-	Children PrometheusNodeList `json:"children"`
-	Status   bool               `json:"status"`
-	Host     string             `json:"host"`
+	Children         PrometheusNodeList `json:"children"`
+	AgentStatus      bool               `json:"agent_status"`
+	PrometheusStatus bool               `json:"prometheus_status"`
+	PrometheusHost   string             `json:"prometheus_host"`
+	AgentHost        string             `json:"agent_host"`
 }
 
 // NewPrometheusNode create a new node with children nodes
-func NewPrometheusNode(hostWithPort string) (*PrometheusNode, error) {
-	if hostWithPort == "" {
+func NewPrometheusNode(prometheusHost string) (*PrometheusNode, error) {
+	if prometheusHost == "" {
 		return nil, errors.New("host must not be empty")
 	}
 	return &PrometheusNode{
-		Children: nil,
-		Status:   false,
-		Host:     hostWithPort,
+		Children:         nil,
+		AgentStatus:      false,
+		PrometheusStatus: false,
+		PrometheusHost:   prometheusHost,
+		AgentHost:        "",
 	}, nil
 }
 
@@ -44,7 +48,7 @@ func NewPrometheusNodeList(feds []string) PrometheusNodeList {
 // Search will find the matched nodes and  return true if exist
 func (pn *PrometheusNode) Search(host string, recursive bool) bool {
 	for _, children := range pn.Children {
-		if children.Host == host {
+		if children.PrometheusHost == host {
 			return true
 		}
 		if recursive == true {
@@ -57,15 +61,29 @@ func (pn *PrometheusNode) Search(host string, recursive bool) bool {
 	return false
 }
 
-// SearchAndUpdateStatus will find the matched nodes and update status
-func (pn *PrometheusNode) SearchAndUpdateStatus(host string, recursive bool, status bool) bool {
+// SearchAndUpdateAgentStatus will find the matched nodes and update agent status
+func (pn *PrometheusNode) SearchAndUpdateAgentStatus(host string, recursive bool, status bool) bool {
 	for _, children := range pn.Children {
-		if children.Host == host {
-			children.Status = status
+		if children.PrometheusHost == host {
+			children.AgentStatus = status
 			return true
 		}
 		if recursive == true {
-			children.SearchAndUpdateStatus(host, recursive, status)
+			children.SearchAndUpdateAgentStatus(host, true, status)
+		}
+	}
+	return false
+}
+
+// SearchAndUpdatePrometheusStatus will find the matched nodes and update prometheus status
+func (pn *PrometheusNode) SearchAndUpdatePrometheusStatus(host string, recursive bool, status bool) bool {
+	for _, children := range pn.Children {
+		if children.PrometheusHost == host {
+			children.PrometheusStatus = status
+			return true
+		}
+		if recursive == true {
+			children.SearchAndUpdatePrometheusStatus(host, true, status)
 		}
 	}
 	return false
@@ -76,12 +94,12 @@ func (pn *PrometheusNode) SearchAndUpdateStatus(host string, recursive bool, sta
 func (pn *PrometheusNode) InsertOrUpdate(newNode *PrometheusNode, search bool) {
 	// search only in first layer
 	// if not exist , then append on its children array
-	if search && pn.Search(newNode.Host, false) == false {
+	if search && pn.Search(newNode.PrometheusHost, false) == false {
 		pn.Children = append(pn.Children, newNode)
 		return
 	}
 	for _, child := range pn.Children {
-		if child.Host == newNode.Host {
+		if child.PrometheusHost == newNode.PrometheusHost {
 			child.Children = newNode.Children
 			return
 		}
@@ -92,7 +110,7 @@ func (pn *PrometheusNode) InsertOrUpdate(newNode *PrometheusNode, search bool) {
 // DeleteNodeByHost will delete from graph by host name
 func (pn *PrometheusNode) DeleteNodeByHost(host string) bool {
 	for index, children := range pn.Children {
-		if children.Host == host {
+		if children.PrometheusHost == host {
 			pn.Children = append(pn.Children[:index], pn.Children[index+1:]...)
 			return true
 		}
@@ -109,18 +127,25 @@ func (pn *PrometheusNode) PrintNodesTree(prefix string, depth int, withStatus bo
 	prefixWithDepth := strings.Repeat(prefix, depth)
 	status := ""
 	if withStatus == true {
-		if pn.Status == true {
-			status = "[ok]"
+		if pn.AgentStatus == true {
+			status = "[agent=ok]"
 		} else {
-			status = "[error]"
+			status = "[agent=error]"
 		}
 	} else {
 	}
-	tree := "\n" + prefixWithDepth + pn.Host + status
+	tree := "\n" + prefixWithDepth + pn.PrometheusHost + status
 	for _, child := range pn.Children {
 		tree = tree + fmt.Sprint(child.PrintNodesTree(prefix, depth+1, withStatus))
 	}
 	return tree
+}
+
+// Ping will send request to each children and get back the response
+func (pn *PrometheusNode) Ping() {
+	// todo : update status only ping the first level of children
+	// check current prometheus host status
+	// MakeRequest(pn.PrometheusHost)
 }
 
 // GetGraph will return a http handler function
@@ -142,7 +167,7 @@ func UpdateGraph(pn *PrometheusNode) func(w http.ResponseWriter, r *http.Request
 			w.Write([]byte("Invalid request"))
 			return
 		}
-		if node.Host == "" {
+		if node.PrometheusHost == "" {
 			w.WriteHeader(http.StatusBadRequest)
 			w.Write([]byte("Invalid request"))
 			return

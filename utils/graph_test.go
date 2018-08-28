@@ -50,8 +50,8 @@ func TestNewPrometheusNode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Exprect create a new node struct , but got error %s", err)
 	}
-	if node.Host != host {
-		t.Fatalf("Exprect node host is %s , but got  %s", host, node.Host)
+	if node.PrometheusHost != host {
+		t.Fatalf("Exprect node host is %s , but got  %s", host, node.PrometheusHost)
 	}
 	host = ""
 	node, err = NewPrometheusNode(host)
@@ -123,15 +123,15 @@ func TestPrometheusNodeInsertOrUpdate(t *testing.T) {
 	}
 }
 
-func TestPrometheusNodeSearchAndUpdateStatus(t *testing.T) {
+func TestPrometheusNodeSearchAndUpdateAgentStatus(t *testing.T) {
 	nodeRoot, _ := NewPrometheusNode(rootHost)
 	nodeRootList := NewPrometheusNodeList(fedsRoot)
 	nodeRoot.Children = nodeRootList
 
-	nodeRoot.SearchAndUpdateStatus(childrenHosts[0], true, true)
+	nodeRoot.SearchAndUpdateAgentStatus(childrenHosts[0], true, true)
 
-	if nodeRoot.Children[0].Status != true {
-		t.Fatalf("Expect change status to true, but got %v", nodeRoot.Children[0].Status)
+	if nodeRoot.Children[0].AgentStatus != true {
+		t.Fatalf("Expect change status to true, but got %v", nodeRoot.Children[0].AgentStatus)
 	}
 
 	nodeChild2, _ := NewPrometheusNode(childrenHosts[2])
@@ -139,7 +139,7 @@ func TestPrometheusNodeSearchAndUpdateStatus(t *testing.T) {
 	nodeChild2.Children = nodeChild2List
 	nodeRoot.InsertOrUpdate(nodeChild2, true)
 
-	nodeRoot.SearchAndUpdateStatus(childrenHosts[2], true, true)
+	nodeRoot.SearchAndUpdateAgentStatus(childrenHosts[2], true, true)
 
 	// status := nodeRoot.Children[1].Children
 
@@ -166,25 +166,25 @@ source-prometheus:9090
 		t.Fatalf("Expect %s, but got %s", expect, nodeRoot.PrintNodesTree("————", 0, false))
 	}
 	expect = `
-source-prometheus:9090[error]
-————source-prometheus-1:9090[error]
-————source-prometheus-2:9090[error]
-————————source-prometheus-21:9090[error]
-————————source-prometheus-22:9090[error]
-————————source-prometheus-23:9090[error]
-————source-prometheus-3:9090[error]`
+source-prometheus:9090[agent=error]
+————source-prometheus-1:9090[agent=error]
+————source-prometheus-2:9090[agent=error]
+————————source-prometheus-21:9090[agent=error]
+————————source-prometheus-22:9090[agent=error]
+————————source-prometheus-23:9090[agent=error]
+————source-prometheus-3:9090[agent=error]`
 	if expect != nodeRoot.PrintNodesTree("————", 0, true) {
 		t.Fatalf("Expect %s, but got %s", expect, nodeRoot.PrintNodesTree("————", 0, true))
 	}
-	nodeRoot.SearchAndUpdateStatus(childrenHosts[2], true, true)
+	nodeRoot.SearchAndUpdateAgentStatus(childrenHosts[2], true, true)
 	expect = `
-source-prometheus:9090[error]
-————source-prometheus-1:9090[error]
+source-prometheus:9090[agent=error]
+————source-prometheus-1:9090[agent=error]
 ————source-prometheus-2:9090[ok]
-————————source-prometheus-21:9090[error]
-————————source-prometheus-22:9090[error]
-————————source-prometheus-23:9090[error]
-————source-prometheus-3:9090[error]`
+————————source-prometheus-21:9090[agent=error]
+————————source-prometheus-22:9090[agent=error]
+————————source-prometheus-23:9090[agent=error]
+————source-prometheus-3:9090[agent=error]`
 	if expect != nodeRoot.PrintNodesTree("————", 0, true) {
 		t.Fatalf("Expect %s, but got %s", expect, nodeRoot.PrintNodesTree("————", 0, true))
 	}
@@ -299,6 +299,6 @@ func TestGetFederationHostsAndUpdateGraphNode(t *testing.T) {
 	pnl := response.Children
 	assert.Equal(t, 3, len(pnl))
 	assert.Equal(t, 1, len(pnl[0].Children))
-	assert.Equal(t, pnl[0].Children[0].Host, "source-prometheus-11:9090")
-	assert.True(t, pnl[0].Children[0].Status)
+	assert.Equal(t, pnl[0].Children[0].PrometheusHost, "source-prometheus-11:9090")
+	assert.True(t, pnl[0].Children[0].AgentStatus)
 }

@@ -5,6 +5,8 @@ import (
 	"io/ioutil"
 	"net/http"
 	"strings"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // GetNextProxyHeader will parse the request header and send request
@@ -29,6 +31,16 @@ func GetNextProxyHeader(r *http.Request) ([]string, error) {
 
 // MakeRequest make http request with headers
 func MakeRequest(url string, header map[string]string) (string, error) {
+	log.Infof("Send proxy request to %s", url)
+	log.Infof("Request Header is %v", header)
+	if url == "" {
+		return "", errors.New("url is empty")
+	}
+
+	if !strings.HasPrefix(url, "http://") {
+		url = "http://" + url
+	}
+
 	client := &http.Client{}
 	req, _ := http.NewRequest("GET", url, nil)
 	for k, v := range header {
@@ -53,7 +65,7 @@ func MakePrometheusRequest(r *http.Request) (string, error) {
 	}
 	// Direct send request to local prometheus server
 	if parseResult[0] == "" && parseResult[1] == "" && parseResult[2] != "" {
-		resp, err := MakeRequest(parseResult[0], nil)
+		resp, err := MakeRequest(parseResult[2], nil)
 		if err != nil {
 			return "", err
 		}

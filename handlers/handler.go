@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
+	log "github.com/sirupsen/logrus"
 	"github.com/zhangmingkai4315/hercules/utils"
 )
 
@@ -20,6 +21,7 @@ func RequestProxy(w http.ResponseWriter, r *http.Request) {
 	resp, err := utils.MakePrometheusRequest(r)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
+		log.Error(err.Error())
 		fmt.Fprintf(w, "Error: %s", err)
 		return
 	}
